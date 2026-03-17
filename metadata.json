@@ -1,0 +1,7 @@
+{
+  "name": "孕婦飲食指南 (Pregnancy Diet Guide)",
+  "description": "一個專為孕婦設計的應用程式，可透過輸入食材、菜式或上傳照片，快速查詢食物安全性、營養價值及替代方案。",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
