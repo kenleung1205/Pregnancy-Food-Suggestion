@@ -4,16 +4,16 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { Camera, Upload, Search, Leaf, X, Loader2, Info } from 'lucide-react';
+import { Camera, Search, Leaf, X, Loader2, Info, ShieldCheck, AlertTriangle, ShieldAlert, HeartPulse, Lightbulb } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
-import { analyzeFood } from './services/gemini';
+import { analyzeFood, AnalysisResult } from './services/gemini';
 
 export default function App() {
   const [inputText, setInputText] = useState('');
   const [image, setImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
+  const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -59,6 +59,19 @@ export default function App() {
       setError(err.message || "分析時發生錯誤，請稍後再試。");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const getSafetyConfig = (status: string) => {
+    switch(status) {
+      case '安全': 
+        return { icon: ShieldCheck, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-100 text-emerald-700' };
+      case '需注意': 
+        return { icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', badge: 'bg-amber-100 text-amber-800' };
+      case '避免': 
+        return { icon: ShieldAlert, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700' };
+      default: 
+        return { icon: Info, color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200', badge: 'bg-gray-100 text-gray-700' };
     }
   };
 
@@ -169,17 +182,59 @@ export default function App() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-8 bg-white rounded-2xl shadow-md border border-rose-100 overflow-hidden"
+              className="mt-8 space-y-5"
             >
-              <div className="bg-rose-50 px-5 py-3 border-b border-rose-100">
-                <h2 className="font-bold text-rose-800 flex items-center gap-2">
-                  <Leaf className="w-5 h-5" />
-                  分析結果
-                </h2>
+              <div className="text-center mb-2">
+                <h2 className="text-2xl font-bold text-gray-800">{result.foodName}</h2>
               </div>
-              <div className="p-5">
-                <div className="markdown-body">
-                  <Markdown>{result}</Markdown>
+
+              {/* Safety Section */}
+              {(() => {
+                const config = getSafetyConfig(result.safetyStatus);
+                const SafetyIcon = config.icon;
+                return (
+                  <div className={`rounded-2xl border ${config.border} overflow-hidden shadow-sm bg-white`}>
+                    <div className={`${config.bg} px-4 py-3 border-b ${config.border} flex items-center justify-between`}>
+                      <div className="flex items-center gap-2">
+                        <SafetyIcon className={`w-5 h-5 ${config.color}`} />
+                        <h3 className={`font-bold ${config.color}`}>安全性評估</h3>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-sm font-bold ${config.badge}`}>
+                        {result.safetyStatus}
+                      </span>
+                    </div>
+                    <div className="p-4">
+                      <div className="markdown-body text-sm">
+                        <Markdown>{result.safetyExplanation}</Markdown>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Nutrition Section */}
+              <div className="rounded-2xl border border-blue-200 overflow-hidden shadow-sm bg-white">
+                <div className="bg-blue-50 px-4 py-3 border-b border-blue-200 flex items-center gap-2">
+                  <HeartPulse className="w-5 h-5 text-blue-600" />
+                  <h3 className="font-bold text-blue-800">營養價值</h3>
+                </div>
+                <div className="p-4">
+                  <div className="markdown-body text-sm">
+                    <Markdown>{result.nutrition}</Markdown>
+                  </div>
+                </div>
+              </div>
+
+              {/* Alternatives Section */}
+              <div className="rounded-2xl border border-purple-200 overflow-hidden shadow-sm bg-white">
+                <div className="bg-purple-50 px-4 py-3 border-b border-purple-200 flex items-center gap-2">
+                  <Lightbulb className="w-5 h-5 text-purple-600" />
+                  <h3 className="font-bold text-purple-800">替代方案</h3>
+                </div>
+                <div className="p-4">
+                  <div className="markdown-body text-sm">
+                    <Markdown>{result.alternatives}</Markdown>
+                  </div>
                 </div>
               </div>
             </motion.div>
