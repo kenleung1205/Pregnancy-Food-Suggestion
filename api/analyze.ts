@@ -10,7 +10,7 @@ export default async function handler(req: any, res: any) {
     const { text, imageBase64 } = req.body;
     
     // 關鍵修改：使用 gemini-1.5-flash-latest 確保 404 錯誤消失
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     // 這是你原本的專業 Prompt
     const prompt = `你是一位專業的孕婦營養專家。請分析以下食物、菜式或食材。
