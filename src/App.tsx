@@ -4,18 +4,138 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { Camera, Search, Leaf, X, Loader2, Info, ShieldCheck, AlertTriangle, ShieldAlert, HeartPulse, Lightbulb } from 'lucide-react';
+import { Camera, Search, Leaf, X, Loader2, Info, ShieldCheck, AlertTriangle, ShieldAlert, HeartPulse, Lightbulb, Share2, Download, Languages } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
-import { analyzeFood, AnalysisResult } from './services/gemini';
+import { toPng } from 'html-to-image';
+import { analyzeFood, translateResult, AnalysisResult } from './services/gemini';
 
 export default function App() {
   const [inputText, setInputText] = useState('');
   const [image, setImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const resultCardRef = useRef<HTMLDivElement>(null);
+
+  const handleTranslate = async () => {
+    if (!result) return;
+    setIsTranslating(true);
+    try {
+      const translated = await translateResult(result);
+      setResult(translated);
+    } catch (err: any) {
+      console.error(err);
+      setError("Translation failed.");
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  const handleShareImage = async () => {
+    if (!resultCardRef.current) return;
+    
+    setIsExporting(true);
+    try {
+      const dataUrl = await toPng(resultCardRef.current, {
+        backgroundColor: '#ffffff',
+        pixelRatio: 2, // Higher quality
+        style: {
+          padding: '24px',
+          borderRadius: '32px',
+        }
+      });
+      
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      const file = new File([blob], `pregnancy-food-guide-${result?.foodName}.png`, { type: 'image/png' });
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: '孕婦飲食指南分析結果',
+          text: `我正在使用孕婦飲食指南分析：${result?.foodName}`,
+        });
+      } else {
+        throw new Error('SHARE_NOT_SUPPORTED');
+      }
+    } catch (err: any) {
+      // Ignore user cancellation
+      if (err.name === 'AbortError') {
+        console.log('Share canceled by user');
+        return;
+      }
+
+      console.error('Sharing failed', err);
+      
+      // Fallback to download if sharing fails or is not supported
+      try {
+        const dataUrl = await toPng(resultCardRef.current, {
+          backgroundColor: '#ffffff',
+          pixelRatio: 2,
+          style: {
+            padding: '24px',
+            borderRadius: '32px',
+          }
+        });
+        const link = document.createElement('a');
+        link.download = `pregnancy-food-guide-${result?.foodName}.png`;
+        link.href = dataUrl;
+        link.click();
+        setError("您的裝置不支援直接分享圖片，已改為下載圖片。");
+      } catch (fallbackErr) {
+        setError("分享失敗，請稍後再試。");
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleSaveAsImage = async () => {
+    if (!resultCardRef.current) return;
+    
+    setIsExporting(true);
+    try {
+      const dataUrl = await toPng(resultCardRef.current, {
+        backgroundColor: '#ffffff',
+        pixelRatio: 2,
+        style: {
+          padding: '24px',
+          borderRadius: '32px',
+        }
+      });
+      
+      const link = document.createElement('a');
+      link.download = `pregnancy-food-guide-${result?.foodName}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error('Could not generate image', err);
+      setError("無法生成圖片，請稍後再試。");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!result) return;
+
+    const cleanText = (text: string) => text.replace(/[*_#]/g, '');
+    
+    const message = `🤰 *孕婦飲食指南分析結果* 🤰\n\n` +
+      `🍴 *食物*：${result.foodName}\n` +
+      `🛡️ *安全性*：${result.safetyStatus}\n\n` +
+      `📝 *評估*：\n${cleanText(result.safetyExplanation)}\n\n` +
+      `💪 *營養*：\n${cleanText(result.nutrition)}\n\n` +
+      `💡 *建議*：\n${cleanText(result.alternatives)}\n\n` +
+      `🔗 立即查詢：${window.location.href}`;
+
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -52,8 +172,8 @@ export default function App() {
     setResult(null);
 
     try {
-      const analysis = await analyzeFood(inputText, image);
-      setResult(analysis);
+      const analysisResult = await analyzeFood(inputText, image);
+      setResult(analysisResult);
     } catch (err: any) {
       console.error(err);
       setError(err.message || "分析時發生錯誤，請稍後再試。");
@@ -65,10 +185,13 @@ export default function App() {
   const getSafetyConfig = (status: string) => {
     switch(status) {
       case '安全': 
+      case 'Safe':
         return { icon: ShieldCheck, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-100 text-emerald-700' };
       case '需注意': 
+      case 'Caution':
         return { icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', badge: 'bg-amber-100 text-amber-800' };
       case '避免': 
+      case 'Avoid':
         return { icon: ShieldAlert, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700' };
       default: 
         return { icon: Info, color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200', badge: 'bg-gray-100 text-gray-700' };
@@ -184,59 +307,121 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               className="mt-8 space-y-5"
             >
-              <div className="text-center mb-2">
-                <h2 className="text-2xl font-bold text-gray-800">{result.foodName}</h2>
-              </div>
+              <div ref={resultCardRef} className="space-y-5 bg-white p-4 rounded-3xl border border-gray-100 shadow-sm">
+                <div className="text-center mb-2">
+                  <h2 className="text-2xl font-bold text-gray-800">{result.foodName}</h2>
+                </div>
 
-              {/* Safety Section */}
-              {(() => {
-                const config = getSafetyConfig(result.safetyStatus);
-                const SafetyIcon = config.icon;
-                return (
-                  <div className={`rounded-2xl border ${config.border} overflow-hidden shadow-sm bg-white`}>
-                    <div className={`${config.bg} px-4 py-3 border-b ${config.border} flex items-center justify-between`}>
-                      <div className="flex items-center gap-2">
-                        <SafetyIcon className={`w-5 h-5 ${config.color}`} />
-                        <h3 className={`font-bold ${config.color}`}>安全性評估</h3>
+                {/* Safety Section */}
+                {(() => {
+                  const config = getSafetyConfig(result.safetyStatus);
+                  const SafetyIcon = config.icon;
+                  const isEnglish = result.safetyStatus === 'Safe' || result.safetyStatus === 'Caution' || result.safetyStatus === 'Avoid';
+                  return (
+                    <div className={`rounded-2xl border ${config.border} overflow-hidden shadow-sm bg-white`}>
+                      <div className={`${config.bg} px-4 py-3 border-b ${config.border} flex items-center justify-between`}>
+                        <div className="flex items-center gap-2">
+                          <SafetyIcon className={`w-5 h-5 ${config.color}`} />
+                          <h3 className={`font-bold ${config.color}`}>
+                            {isEnglish ? 'Safety Assessment' : '安全性評估'}
+                          </h3>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-sm font-bold ${config.badge}`}>
+                          {result.safetyStatus}
+                        </span>
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-sm font-bold ${config.badge}`}>
-                        {result.safetyStatus}
-                      </span>
-                    </div>
-                    <div className="p-4">
-                      <div className="markdown-body text-sm">
-                        <Markdown>{result.safetyExplanation}</Markdown>
+                      <div className="p-4">
+                        <div className="markdown-body text-sm">
+                          <Markdown>{result.safetyExplanation}</Markdown>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
 
-              {/* Nutrition Section */}
-              <div className="rounded-2xl border border-blue-200 overflow-hidden shadow-sm bg-white">
-                <div className="bg-blue-50 px-4 py-3 border-b border-blue-200 flex items-center gap-2">
-                  <HeartPulse className="w-5 h-5 text-blue-600" />
-                  <h3 className="font-bold text-blue-800">營養價值</h3>
-                </div>
-                <div className="p-4">
-                  <div className="markdown-body text-sm">
-                    <Markdown>{result.nutrition}</Markdown>
-                  </div>
+                {/* Nutrition Section */}
+                {(() => {
+                  const isEnglish = result.safetyStatus === 'Safe' || result.safetyStatus === 'Caution' || result.safetyStatus === 'Avoid';
+                  return (
+                    <div className="rounded-2xl border border-blue-200 overflow-hidden shadow-sm bg-white">
+                      <div className="bg-blue-50 px-4 py-3 border-b border-blue-200 flex items-center gap-2">
+                        <HeartPulse className="w-5 h-5 text-blue-600" />
+                        <h3 className="font-bold text-blue-800">
+                          {isEnglish ? 'Nutrition' : '營養價值'}
+                        </h3>
+                      </div>
+                      <div className="p-4">
+                        <div className="markdown-body text-sm">
+                          <Markdown>{result.nutrition}</Markdown>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Alternatives Section */}
+                {(() => {
+                  const isEnglish = result.safetyStatus === 'Safe' || result.safetyStatus === 'Caution' || result.safetyStatus === 'Avoid';
+                  return (
+                    <div className="rounded-2xl border border-purple-200 overflow-hidden shadow-sm bg-white">
+                      <div className="bg-purple-50 px-4 py-3 border-b border-purple-200 flex items-center gap-2">
+                        <Lightbulb className="w-5 h-5 text-purple-600" />
+                        <h3 className="font-bold text-purple-800">
+                          {isEnglish ? 'Alternatives' : '替代方案'}
+                        </h3>
+                      </div>
+                      <div className="p-4">
+                        <div className="markdown-body text-sm">
+                          <Markdown>{result.alternatives}</Markdown>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+                
+                {/* App Branding for Export */}
+                <div className="pt-4 border-t border-gray-50 flex items-center justify-center gap-2 text-rose-400 opacity-60">
+                  <Leaf className="w-4 h-4" />
+                  <span className="text-xs font-medium uppercase tracking-widest">孕婦飲食指南</span>
                 </div>
               </div>
 
-              {/* Alternatives Section */}
-              <div className="rounded-2xl border border-purple-200 overflow-hidden shadow-sm bg-white">
-                <div className="bg-purple-50 px-4 py-3 border-b border-purple-200 flex items-center gap-2">
-                  <Lightbulb className="w-5 h-5 text-purple-600" />
-                  <h3 className="font-bold text-purple-800">替代方案</h3>
-                </div>
-                <div className="p-4">
-                  <div className="markdown-body text-sm">
-                    <Markdown>{result.alternatives}</Markdown>
-                  </div>
-                </div>
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                <button
+                  type="button"
+                  onClick={handleTranslate}
+                  disabled={isTranslating || isLoading || isExporting}
+                  className="flex items-center justify-center gap-2 py-3 bg-white border border-gray-200 text-gray-700 rounded-2xl font-bold shadow-sm hover:bg-gray-50 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {isTranslating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Languages className="w-4 h-4" />}
+                  {(() => {
+                    const isEnglish = result.safetyStatus === 'Safe' || result.safetyStatus === 'Caution' || result.safetyStatus === 'Avoid';
+                    return <span>{isEnglish ? '翻譯為中文' : '翻譯為英文'}</span>;
+                  })()}
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={handleSaveAsImage}
+                  disabled={isLoading || isExporting}
+                  className="flex items-center justify-center gap-2 py-3 bg-white border border-gray-200 text-gray-700 rounded-2xl font-bold shadow-sm hover:bg-gray-50 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  <span>儲存為圖片</span>
+                </button>
               </div>
+
+              {/* Share Button */}
+              <button
+                type="button"
+                onClick={handleShareImage}
+                disabled={isLoading || isExporting}
+                className="w-full flex items-center justify-center gap-2 py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg hover:bg-emerald-600 active:scale-95 transition-all disabled:opacity-50"
+              >
+                {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Share2 className="w-5 h-5" />}
+                <span>分享圖片至 WhatsApp</span>
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
