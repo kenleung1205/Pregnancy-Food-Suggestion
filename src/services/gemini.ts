@@ -12,6 +12,7 @@ export interface AnalysisResult {
 
 export async function analyzeFood(text: string, imageBase64: string | null): Promise<AnalysisResult> {
   const prompt = `你是一位專業的孕婦營養專家。請分析以下食物、菜式或食材。
+請利用 Google 搜尋獲取最新的醫學研究、食品安全指南及營養資訊，以確保分析結果準確且符合最新標準。
 如果輸入中包含多個食物或菜式，請提供一個「綜合性」的分析意見，將所有項目整合在一起討論。
 請以 JSON 格式回覆一個物件，包含以下欄位：
 - foodName: 識別出的食物名稱（如果是多個，請用「、」分隔）
@@ -59,7 +60,8 @@ export async function analyzeFood(text: string, imageBase64: string | null): Pro
           alternatives: { type: Type.STRING, description: "替代方案" }
         },
         required: ["foodName", "safetyStatus", "safetyExplanation", "nutrition", "alternatives"]
-      }
+      },
+      tools: [{ googleSearch: {} }]
     }
   });
 

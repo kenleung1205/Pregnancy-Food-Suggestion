@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { Camera, Search, Leaf, X, Loader2, Info, ShieldCheck, AlertTriangle, ShieldAlert, HeartPulse, Lightbulb, Share2, Download, Languages } from 'lucide-react';
+import { Camera, Search, Leaf, X, Loader2, Info, ShieldCheck, AlertTriangle, ShieldAlert, HeartPulse, Lightbulb, Share2, Download, Languages, Mic, MicOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
 import { toPng } from 'html-to-image';
@@ -16,6 +16,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -33,6 +34,43 @@ export default function App() {
     } finally {
       setIsTranslating(false);
     }
+  };
+
+  const startListening = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setError("您的瀏覽器不支援語音輸入。");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'zh-HK';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInputText((prev) => prev + (prev ? ' ' : '') + transcript);
+      setIsListening(false);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error(event.error);
+      setIsListening(false);
+      if (event.error !== 'no-speech') {
+        setError("語音識別失敗，請重試。");
+      }
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
   };
 
   const handleShareImage = async () => {
@@ -222,9 +260,32 @@ export default function App() {
         {/* Input Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-            <label htmlFor="food-input" className="block text-sm font-medium text-gray-700 mb-2">
-              想查詢什麼食物？
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="food-input" className="block text-sm font-medium text-gray-700">
+                想查詢什麼食物？
+              </label>
+              <button
+                type="button"
+                onClick={startListening}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                  isListening 
+                    ? 'bg-rose-500 text-white animate-pulse' 
+                    : 'bg-rose-50 text-rose-600 hover:bg-rose-100'
+                }`}
+              >
+                {isListening ? (
+                  <>
+                    <MicOff className="w-3.5 h-3.5" />
+                    <span>正在聆聽...</span>
+                  </>
+                ) : (
+                  <>
+                    <Mic className="w-3.5 h-3.5" />
+                    <span>語音輸入</span>
+                  </>
+                )}
+              </button>
+            </div>
             <textarea
               id="food-input"
               value={inputText}
