@@ -1,6 +1,16 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// 關鍵修改：使用 import.meta.env 並且加上 VITE_ 前綴
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+// 增加安全檢查，防止 Key 遺失時網頁直接白屏
+if (!apiKey) {
+  console.error("錯誤：找不到 API Key！請確保 Vercel 環境變數中已設定 VITE_GEMINI_API_KEY");
+}
+
+const ai = new GoogleGenAI({ apiKey: apiKey });
+
+// ... 後面的 export interface 和 analyzeFood 函數保持不變
 
 export interface AnalysisResult {
   foodName: string;
@@ -10,7 +20,7 @@ export interface AnalysisResult {
   alternatives: string;
 }
 
-export async function analyzeFood(text: string, imageBase64: string | null): Promise<AnalysisResult> {
+export async function analyzeFood(text: string, imageBase64: string | null): Promise<analysisresult> {
   const prompt = `你是一位專業的孕婦營養專家。請分析以下食物、菜式或食材。
 請以 JSON 格式回覆，包含以下欄位：
 - foodName: 識別出的食物名稱
